@@ -1,0 +1,22 @@
+<?= $this->extend('layouts/main') ?>
+<?= $this->section('content') ?>
+<div class="ms-page-head">
+    <div><h1>Customers</h1><p>Profiles used for invoices, outstanding balances and WhatsApp reminders.</p></div>
+    <?php if (auth()->user()->can('customers.create')): ?><button class="ms-btn ms-btn-primary" type="button" data-open-dialog="customerDialog">+ Add Customer</button><?php endif; ?>
+</div>
+<div class="ms-table-tools"><div class="ms-search"><input class="ms-input" data-table-filter="#customerTable" placeholder="Search customer, phone, email or GSTIN"></div></div>
+<div class="ms-table-scroll">
+<table class="ms-table" id="customerTable"><thead><tr><th>Name</th><th>Phone</th><th>WhatsApp</th><th>Email</th><th>GSTIN</th><th>Invoices</th><th>Due</th><th>Action</th></tr></thead><tbody>
+<?php foreach ($customers as $c): ?>
+<tr><td><strong><?= esc($c['name']) ?></strong><br><span class="ms-muted"><?= esc($c['address'] ?? '') ?></span></td><td><?= esc($c['phone']) ?></td><td><?= esc($c['whatsapp_phone'] ?: $c['phone']) ?></td><td><?= esc($c['email'] ?? '-') ?></td><td><?= esc($c['gstin'] ?? '-') ?></td><td><?= number_format((float) $c['invoice_count'], 0) ?></td><td><strong class="<?= (float) $c['due_total'] > 0 ? 'ms-text-danger' : '' ?>">₹<?= number_format((float) $c['due_total'], 2) ?></strong></td><td><?php if (auth()->user()->can('customers.create')): ?><button class="ms-btn ms-btn-secondary is-sm" type="button" data-open-dialog="editCustomer<?= (int) $c['id'] ?>">Edit</button><?php else: ?><span class="ms-muted">View only</span><?php endif; ?></td></tr>
+<?php endforeach; ?>
+<?php if (! $customers): ?><tr><td colspan="8" class="ms-empty ms-no-filter">No customers yet.</td></tr><?php endif; ?>
+</tbody></table></div>
+
+<?php if (auth()->user()->can('customers.create')): ?>
+<?php foreach ($customers as $c): ?>
+<dialog id="editCustomer<?= (int) $c['id'] ?>"><div class="ms-dialog-body"><div class="ms-dialog-head"><h3>Edit customer</h3><button type="button" class="ms-btn ms-btn-secondary is-sm" data-close-dialog>Close</button></div><form method="post" action="<?= site_url('customers/' . $c['id']) ?>"><?= csrf_field() ?><div class="ms-form-grid"><div class="ms-field"><label>Name *</label><input class="ms-input" name="name" required value="<?= esc($c['name']) ?>"></div><div class="ms-field"><label>Phone *</label><input class="ms-input" name="phone" required value="<?= esc($c['phone']) ?>"></div><div class="ms-field"><label>WhatsApp phone</label><input class="ms-input" name="whatsapp_phone" value="<?= esc($c['whatsapp_phone'] ?? '') ?>"></div><div class="ms-field"><label>Email</label><input class="ms-input" name="email" type="email" value="<?= esc($c['email'] ?? '') ?>"></div><div class="ms-field"><label>GSTIN</label><input class="ms-input" name="gstin" value="<?= esc($c['gstin'] ?? '') ?>"></div><div class="ms-field ms-full"><label>Address</label><textarea class="ms-textarea" name="address"><?= esc($c['address'] ?? '') ?></textarea></div><div class="ms-field ms-full"><label>Notes</label><textarea class="ms-textarea" name="notes"><?= esc($c['notes'] ?? '') ?></textarea></div><div class="ms-field ms-full"><button class="ms-btn ms-btn-primary">Save Customer</button></div></div></form></div></dialog>
+<?php endforeach; ?>
+<dialog id="customerDialog"><div class="ms-dialog-body"><div class="ms-dialog-head"><h3>Add customer</h3><button type="button" class="ms-btn ms-btn-secondary is-sm" data-close-dialog>Close</button></div><form method="post" action="<?= site_url('customers') ?>"><?= csrf_field() ?><div class="ms-form-grid"><div class="ms-field"><label>Name *</label><input class="ms-input" name="name" required></div><div class="ms-field"><label>Phone *</label><input class="ms-input" name="phone" required></div><div class="ms-field"><label>WhatsApp phone</label><input class="ms-input" name="whatsapp_phone"></div><div class="ms-field"><label>Email</label><input class="ms-input" name="email" type="email"></div><div class="ms-field"><label>GSTIN</label><input class="ms-input" name="gstin"></div><div class="ms-field ms-full"><label>Address</label><textarea class="ms-textarea" name="address"></textarea></div><div class="ms-field ms-full"><label>Notes</label><textarea class="ms-textarea" name="notes"></textarea></div><div class="ms-field ms-full"><button class="ms-btn ms-btn-primary">Save Customer</button></div></div></form></div></dialog>
+<?php endif; ?>
+<?= $this->endSection() ?>
