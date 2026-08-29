@@ -90,7 +90,7 @@ class Sales extends BaseController
             if(is_array($decoded)) $invoiceConfig=$decoded;
         }
         $invoiceConfig=array_replace([
-            'template'=>$shop['invoice_template']??'classic','title'=>$shop['invoice_title']??'TAX INVOICE','gst_enabled'=>(bool)($shop['invoice_default_gst_enabled']??1),
+            'template'=>$shop['invoice_template']??'classic','title'=>$shop['invoice_title']??'TAX INVOICE','gst_enabled'=>(bool)($shop['invoice_default_gst_enabled']??1),'gst_mode'=>$shop['invoice_default_gst_mode']??'inclusive','invoice_color'=>$shop['invoice_color']??'#e87523',
             'show_logo'=>(bool)($shop['invoice_show_logo']??1),'show_signature'=>(bool)($shop['invoice_show_signature']??1),'show_company_phone'=>(bool)($shop['invoice_show_company_phone']??1),
             'show_company_email'=>(bool)($shop['invoice_show_company_email']??1),'show_company_address'=>(bool)($shop['invoice_show_company_address']??1),
             'show_customer_address'=>(bool)($shop['invoice_show_customer_address']??1),'show_customer_gstin'=>(bool)($shop['invoice_show_customer_gstin']??1),

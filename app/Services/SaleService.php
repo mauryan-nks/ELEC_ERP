@@ -17,6 +17,7 @@ class SaleService
         $shop=$db->table('shop_settings')->where('id',1)->get()->getRowArray() ?? [];
         $gstEnabled=!empty($data['gst_enabled']);
         $discountEnabled=!empty($data['discount_enabled']);
+        $gstMode=in_array($data['gst_mode']??($shop['invoice_default_gst_mode']??'inclusive'),['inclusive','exclusive'],true)?($data['gst_mode']??($shop['invoice_default_gst_mode']??'inclusive')):'inclusive';
 
         $db->transBegin();
         try{
@@ -39,6 +40,7 @@ class SaleService
                         'created_at'=>date('Y-m-d H:i:s'),'updated_at'=>date('Y-m-d H:i:s')
                     ]);
                     $customerId=(int)$db->insertID();
+                    $this->queueWelcomeWhatsApp($customerId);
                 }
             }
 
@@ -74,17 +76,26 @@ class SaleService
             foreach($normalized as &$n){
                 $allocated=$overallDiscount>0 ? round($n['net']*$overallRatio,2) : 0.0;
                 $taxable=max(0,$n['net']-$allocated);
-                $tax=round($gstEnabled ? $taxable*$n['tax_percent']/100 : 0,2);
+                if (!$gstEnabled || $n['tax_percent'] <= 0) {
+                    $tax=0.0;
+                    $lineTotal=$taxable;
+                } elseif ($gstMode === 'inclusive') {
+                    $tax=round($taxable - ($taxable / (1 + ($n['tax_percent'] / 100))),2);
+                    $lineTotal=$taxable;
+                } else {
+                    $tax=round($taxable*$n['tax_percent']/100,2);
+                    $lineTotal=round($taxable+$tax,2);
+                }
                 $n['allocated_discount']=$allocated;
                 $n['taxable']=$taxable;
                 $n['tax']=$tax;
-                $n['line_total']=round($taxable+$tax,2);
+                $n['line_total']=$lineTotal;
                 $taxTotal+=$tax;
             }
             unset($n);
             $taxTotal=round($taxTotal,2);
             $discountTotal=round($lineDiscountTotal+$overallDiscount,2);
-            $grand=round($subtotal-$discountTotal+$taxTotal,2);
+            $grand=round($gstMode==='inclusive' ? $subtotal-$discountTotal : $subtotal-$discountTotal+$taxTotal,2);
             if($grand<0) $grand=0;
 
             $paid=min(max((float)($data['paid_amount']??0),0),$grand);
@@ -102,7 +113,9 @@ class SaleService
             $invoiceConfig=[
                 'template'=>$template,
                 'title'=>trim((string)($data['invoice_title']??($shop['invoice_title']??'TAX INVOICE'))) ?: 'TAX INVOICE',
+                'invoice_color'=>$shop['invoice_color']??'#e87523',
                 'gst_enabled'=>$gstEnabled,
+                'gst_mode'=>$gstMode,
                 'discount_enabled'=>$discountEnabled,
                 'overall_discount_type'=>$overallType,
                 'overall_discount_value'=>$overallValue,
@@ -125,7 +138,7 @@ class SaleService
             $companySnapshot=[
                 'name'=>$shop['name']??'Shop','phone'=>$shop['phone']??null,'email'=>$shop['email']??null,
                 'address'=>$shop['address']??null,'gstin'=>$shop['gstin']??null,'logo_path'=>$shop['logo_path']??null,
-                'signature_path'=>$shop['signature_path']??null,'currency'=>$shop['currency']??'INR',
+                'signature_path'=>$shop['signature_path']??null,'logo_base64'=>$shop['logo_base64']??null,'logo_mime'=>$shop['logo_mime']??null,'signature_base64'=>$shop['signature_base64']??null,'signature_mime'=>$shop['signature_mime']??null,'invoice_color'=>$shop['invoice_color']??'#e87523','currency'=>$shop['currency']??'INR',
                 'invoice_title'=>$shop['invoice_title']??'TAX INVOICE','invoice_terms'=>$shop['invoice_terms']??null,'invoice_footer'=>$shop['invoice_footer']??null,
             ];
 
@@ -187,6 +200,10 @@ class SaleService
             }
             $this->queueInvoiceWhatsApp($saleId,$customerId);
             $db->transCommit();
+            // Attempt immediate delivery when the local bridge is online; the queued rows remain
+            // available for the normal cron/CLI worker if the bridge is offline.
+            try { (new \App\Services\WhatsAppQueueService())->processPending(); } catch (\Throwable $ignored) {}
+            try { (new \App\Services\EmailService())->sendInvoice($saleId); } catch (\Throwable $e) { log_message('error', 'Invoice email failed for sale {saleId}: {message}', ['saleId'=>$saleId,'message'=>$e->getMessage()]); }
             return $saleId;
         }catch(\Throwable $e){
             $db->transRollback();
@@ -214,19 +231,31 @@ class SaleService
         $sale=$db->table('sales')->where('id',$saleId)->get()->getRowArray();
         $customer=$db->table('customers')->where('id',$customerId)->get()->getRowArray();
         $shop=$db->table('shop_settings')->where('id',1)->get()->getRowArray();
-        $tpl=$db->table('whatsapp_templates')->where(['event_key'=>'invoice_sent','is_active'=>1])->get()->getRowArray();
-        if(!$tpl||!$customer)return;
+        if(!$sale||!$customer)return;
         $phone=$customer['whatsapp_phone']?:$customer['phone'];
         if(!$phone)return;
-        $replace=[
-            '{customer_name}'=>$customer['name'],'{invoice_no}'=>$sale['invoice_no'],
-            '{grand_total}'=>number_format((float)$sale['grand_total'],2,'.',''),'{due_amount}'=>number_format((float)$sale['due_amount'],2,'.',''),
-            '{paid_amount}'=>number_format((float)$sale['paid_amount'],2,'.',''),'{store_name}'=>$shop['name']??'Shop'
-        ];
-        $db->table('whatsapp_queue')->insert([
-            'customer_id'=>$customerId,'sale_id'=>$saleId,'phone'=>$phone,'event_key'=>'invoice_sent','dedupe_key'=>'invoice_sent:'.$saleId,
-            'message'=>strtr($tpl['message'],$replace),'scheduled_at'=>date('Y-m-d H:i:s'),'status'=>'queued',
-            'created_at'=>date('Y-m-d H:i:s'),'updated_at'=>date('Y-m-d H:i:s')
-        ]);
+        $tpl=$db->table('whatsapp_templates')->where(['event_key'=>'invoice_sent','is_active'=>1])->get()->getRowArray();
+        $replace=['{customer_name}'=>$customer['name'],'{invoice_no}'=>$sale['invoice_no'],'{grand_total}'=>number_format((float)$sale['grand_total'],2,'.',''),'{due_amount}'=>number_format((float)$sale['due_amount'],2,'.',''),'{paid_amount}'=>number_format((float)$sale['paid_amount'],2,'.',''),'{store_name}'=>$shop['name']??'Shop'];
+        $message=$tpl?strtr($tpl['message'],$replace):('Dear '.$customer['name'].', your invoice '.$sale['invoice_no'].' from '.($shop['name']??'our store').' is ready. Total: '.number_format((float)$sale['grand_total'],2).'. Due: '.number_format((float)$sale['due_amount'],2).'.');
+        $now=date('Y-m-d H:i:s');
+        $db->table('whatsapp_queue')->insert(['customer_id'=>$customerId,'sale_id'=>$saleId,'phone'=>$phone,'event_key'=>'invoice_sent_text','dedupe_key'=>'invoice_sent_text:'.$saleId,'message'=>$message,'message_type'=>'text','scheduled_at'=>$now,'status'=>'queued','created_at'=>$now,'updated_at'=>$now]);
+        $db->table('whatsapp_queue')->insert(['customer_id'=>$customerId,'sale_id'=>$saleId,'phone'=>$phone,'event_key'=>'invoice_sent_pdf','dedupe_key'=>'invoice_sent_pdf:'.$saleId,'message'=>'Invoice '.$sale['invoice_no'],'message_type'=>'media','attachment_mime'=>'application/pdf','attachment_name'=>$sale['invoice_no'].'.pdf','scheduled_at'=>$now,'status'=>'queued','created_at'=>$now,'updated_at'=>$now]);
     }
+
+    private function queueWelcomeWhatsApp(int $customerId): void
+    {
+        $db=db_connect();
+        $customer=$db->table('customers')->where('id',$customerId)->get()->getRowArray();
+        $shop=$db->table('shop_settings')->where('id',1)->get()->getRowArray();
+        if(!$customer)return;
+        $phone=$customer['whatsapp_phone']?:$customer['phone'];
+        if(!$phone)return;
+        $tpl=$db->table('whatsapp_templates')->where(['event_key'=>'customer_welcome','is_active'=>1])->get()->getRowArray();
+        $message=$tpl?strtr($tpl['message'],['{customer_name}'=>$customer['name'],'{store_name}'=>$shop['name']??'Shop']):('Welcome '.$customer['name'].'! Thank you for choosing '.($shop['name']??'our store').'. We are happy to have you with us.');
+        $now=date('Y-m-d H:i:s');
+        try {
+            $db->table('whatsapp_queue')->insert(['customer_id'=>$customerId,'phone'=>$phone,'event_key'=>'customer_welcome','dedupe_key'=>'customer_welcome:'.$customerId,'message'=>$message,'message_type'=>'text','scheduled_at'=>$now,'status'=>'queued','created_at'=>$now,'updated_at'=>$now]);
+        } catch(\Throwable $e) { /* duplicate welcome is intentionally ignored */ }
+    }
+
 }

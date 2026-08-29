@@ -4,8 +4,10 @@
 $cfg=$invoiceConfig??[];
 $template=in_array($cfg['template']??'classic',['classic','modern','minimal','compact','executive','retail','bold','bordered','elegant','thermal'],true)?$cfg['template']:'classic';
 $gstEnabled=(bool)($cfg['gst_enabled']??false);
-$showLogo=(bool)($cfg['show_logo']??true) && !empty($shop['logo_path']);
-$showSignature=(bool)($cfg['show_signature']??true) && !empty($shop['signature_path']);
+$showLogo=(bool)($cfg['show_logo']??true) && !empty($shop['logo_base64']);
+$showSignature=(bool)($cfg['show_signature']??true) && !empty($shop['signature_base64']);
+$gstMode=$cfg['gst_mode']??($shop['invoice_default_gst_mode']??'inclusive');
+$invoiceColor=preg_match('/^#[0-9a-fA-F]{6}$/',(string)($cfg['invoice_color']??$shop['invoice_color']??'#e87523'))?($cfg['invoice_color']??$shop['invoice_color']??'#e87523'):'#e87523';
 $showCompanyPhone=(bool)($cfg['show_company_phone']??true) && !empty($shop['phone']);
 $showCompanyEmail=(bool)($cfg['show_company_email']??true) && !empty($shop['email']);
 $showCompanyAddress=(bool)($cfg['show_company_address']??true) && !empty($shop['address']);
@@ -24,10 +26,10 @@ $overallDiscount=(float)($sale['overall_discount_amount']??0);
 ?>
 <div class="ms-no-print ms-page-head"><div><h1><?= esc($sale['invoice_no']) ?></h1><p><?= esc($cfg['title']??'Invoice') ?> · <?= esc(ucfirst($template)) ?> template · <?= $gstEnabled?'GST enabled':'GST not applied' ?></p></div><div class="ms-actions"><a class="ms-btn ms-btn-secondary" href="<?= site_url('sales') ?>">Back</a><?php if((float)$sale['due_amount']>0): ?><button class="ms-btn ms-btn-secondary" type="button" data-open-dialog="paymentDialog">+ Record Payment</button><?php endif; ?><button class="ms-btn ms-btn-primary" type="button" onclick="window.print()">Print / Save PDF</button></div></div>
 
-<article class="ms-invoice invoice-theme-<?= esc($template) ?>" id="printInvoice">
+<article class="ms-invoice invoice-theme-<?= esc($template) ?>" style="--inv-accent:<?= esc($invoiceColor) ?>" id="printInvoice">
     <header class="inv-header">
         <div class="inv-company">
-            <?php if($showLogo): ?><div class="inv-logo"><img src="<?= base_url($shop['logo_path']) ?>" alt="<?= esc($shop['name']??'Company') ?> logo"></div><?php endif; ?>
+            <?php if($showLogo): ?><div class="inv-logo"><img src="data:<?= esc($shop['logo_mime'] ?? 'image/png') ?>;base64,<?= esc($shop['logo_base64']) ?>" alt="<?= esc($shop['name']??'Company') ?> logo"></div><?php endif; ?>
             <div class="inv-company-copy">
                 <h2><?= esc($shop['name']??'Shop') ?></h2>
                 <?php if($showCompanyAddress): ?><div class="inv-company-address"><?= nl2br(esc($shop['address'])) ?></div><?php endif; ?>
@@ -66,7 +68,7 @@ $overallDiscount=(float)($sale['overall_discount_amount']??0);
 
     <div class="inv-table-wrap">
         <table class="inv-table">
-            <thead><tr><th class="inv-col-no">#</th><th>Item</th><?php if($showImei): ?><th>IMEI / Serial</th><?php endif; ?><th class="num">Qty</th><th class="num">Rate</th><?php if($showItemDiscount): ?><th class="num">Discount</th><?php endif; ?><?php if($gstEnabled): ?><th class="num">GST</th><?php endif; ?><th class="num">Amount</th></tr></thead>
+            <thead><tr><th class="inv-col-no">#</th><th>Item</th><?php if($showImei): ?><th>IMEI / Serial</th><?php endif; ?><th class="num">Qty</th><th class="num">Rate</th><?php if($showItemDiscount): ?><th class="num">Discount</th><?php endif; ?><?php if($gstEnabled): ?><th class="num">GST<?= $gstMode==='inclusive' ? ' (Incl.)' : '' ?></th><?php endif; ?><th class="num">Amount</th></tr></thead>
             <tbody><?php foreach($items as $idx=>$it): ?>
                 <tr>
                     <td class="inv-col-no"><?= $idx+1 ?></td>
@@ -84,14 +86,13 @@ $overallDiscount=(float)($sale['overall_discount_amount']??0);
 
     <section class="inv-bottom">
         <div class="inv-notes">
-            <?php if(!empty($sale['notes'])): ?><div><span class="inv-label">Note</span><p><?= nl2br(esc($sale['notes'])) ?></p></div><?php endif; ?>
             <?php if(!empty($cfg['terms'])): ?><div><span class="inv-label">Terms & conditions</span><p><?= nl2br(esc($cfg['terms'])) ?></p></div><?php endif; ?>
         </div>
         <div class="inv-totals">
             <div><span>Subtotal</span><strong><?= $moneyPrefix.number_format((float)$sale['subtotal'],2) ?></strong></div>
             <?php if($lineDiscount>0): ?><div><span>Line discounts</span><strong>− <?= $moneyPrefix.number_format($lineDiscount,2) ?></strong></div><?php endif; ?>
             <?php if($overallDiscount>0): ?><div><span>Invoice discount</span><strong>− <?= $moneyPrefix.number_format($overallDiscount,2) ?></strong></div><?php endif; ?>
-            <?php if($gstEnabled): ?><div><span>GST</span><strong><?= $moneyPrefix.number_format((float)$sale['tax_total'],2) ?></strong></div><?php endif; ?>
+            <?php if($gstEnabled): ?><div><span>GST<?= $gstMode==='inclusive' ? ' (included)' : '' ?></span><strong><?= $moneyPrefix.number_format((float)$sale['tax_total'],2) ?></strong></div><?php endif; ?>
             <div class="grand"><span>Grand total</span><strong><?= $moneyPrefix.number_format((float)$sale['grand_total'],2) ?></strong></div>
             <div><span>Paid</span><strong><?= $moneyPrefix.number_format((float)$sale['paid_amount'],2) ?></strong></div>
             <div class="due"><span>Balance due</span><strong><?= $moneyPrefix.number_format((float)$sale['due_amount'],2) ?></strong></div>
@@ -100,7 +101,7 @@ $overallDiscount=(float)($sale['overall_discount_amount']??0);
 
     <footer class="inv-footer">
         <div class="inv-footer-message"><?php if(!empty($cfg['footer'])): ?><?= esc($cfg['footer']) ?><?php else: ?>Thank you for your business.<?php endif; ?></div>
-        <?php if($showSignature): ?><div class="inv-signature"><img src="<?= base_url($shop['signature_path']) ?>" alt="Authorized signature"><span>Authorized Signatory</span></div><?php endif; ?>
+        <?php if($showSignature): ?><div class="inv-signature"><img src="data:<?= esc($shop['signature_mime'] ?? 'image/png') ?>;base64,<?= esc($shop['signature_base64']) ?>" alt="Authorized signature"><span>Authorized Signatory</span></div><?php endif; ?>
     </footer>
 </article>
 

@@ -28,21 +28,21 @@ $addressPosition = $shop['customer_address_position'] ?? 'left';
     </section>
 
     <section class="ms-card">
-        <div class="ms-section-head"><div><h2>Brand assets</h2><p>PNG, JPG or WebP, maximum 2 MB each.</p></div></div>
+        <div class="ms-section-head"><div><h2>Brand assets</h2><p>PNG, JPG or WebP, maximum 2 MB each. Images are converted to Base64 and stored directly in the database.</p></div></div>
         <div class="ms-upload-grid">
             <div class="ms-upload-card">
                 <div class="ms-upload-preview">
-                    <?php if (!empty($shop['logo_path'])): ?><img src="<?= base_url($shop['logo_path']) ?>" alt="Current company logo"><?php else: ?><span>LOGO</span><?php endif; ?>
+                    <?php if (!empty($shop['logo_base64'])): ?><img src="data:<?= esc($shop['logo_mime'] ?? 'image/png') ?>;base64,<?= esc($shop['logo_base64']) ?>" alt="Current company logo"><?php else: ?><span>LOGO</span><?php endif; ?>
                 </div>
                 <div class="ms-field"><label>Company Logo</label><input class="ms-file" type="file" name="logo" accept="image/png,image/jpeg,image/webp"></div>
-                <?php if (!empty($shop['logo_path'])): ?><label class="ms-check"><input type="checkbox" name="remove_logo" value="1"><span>Remove current logo</span></label><?php endif; ?>
+                <?php if (!empty($shop['logo_base64'])): ?><label class="ms-check"><input type="checkbox" name="remove_logo" value="1"><span>Remove current logo</span></label><?php endif; ?>
             </div>
             <div class="ms-upload-card">
                 <div class="ms-upload-preview is-signature">
-                    <?php if (!empty($shop['signature_path'])): ?><img src="<?= base_url($shop['signature_path']) ?>" alt="Current signature"><?php else: ?><span>SIGNATURE</span><?php endif; ?>
+                    <?php if (!empty($shop['signature_base64'])): ?><img src="data:<?= esc($shop['signature_mime'] ?? 'image/png') ?>;base64,<?= esc($shop['signature_base64']) ?>" alt="Current signature"><?php else: ?><span>SIGNATURE</span><?php endif; ?>
                 </div>
                 <div class="ms-field"><label>Authorized Signature</label><input class="ms-file" type="file" name="signature" accept="image/png,image/jpeg,image/webp"></div>
-                <?php if (!empty($shop['signature_path'])): ?><label class="ms-check"><input type="checkbox" name="remove_signature" value="1"><span>Remove current signature</span></label><?php endif; ?>
+                <?php if (!empty($shop['signature_base64'])): ?><label class="ms-check"><input type="checkbox" name="remove_signature" value="1"><span>Remove current signature</span></label><?php endif; ?>
             </div>
         </div>
     </section>
@@ -80,6 +80,7 @@ $addressPosition = $shop['customer_address_position'] ?? 'left';
                 <option value="full" <?= $addressPosition==='full'?'selected':'' ?>>Full-width billing block</option>
                 <option value="hidden" <?= $addressPosition==='hidden'?'selected':'' ?>>Do not show customer address by default</option>
             </select><div class="ms-help">This answers where the customer/user address appears on the invoice.</div></div>
+            <div class="ms-field"><label>Invoice accent color</label><input class="ms-input" type="color" name="invoice_color" value="<?= esc($shop['invoice_color'] ?? '#e87523') ?>"></div>
             <div class="ms-field"><label>Invoice Prefix</label><input class="ms-input" name="invoice_prefix" value="<?= esc($shop['invoice_prefix'] ?? 'INV') ?>"></div>
             <div class="ms-field"><label>Purchase Prefix</label><input class="ms-input" name="purchase_prefix" value="<?= esc($shop['purchase_prefix'] ?? 'PUR') ?>"></div>
             <div class="ms-field"><label>Currency</label><input class="ms-input" name="currency" value="<?= esc($shop['currency'] ?? 'INR') ?>"></div>
@@ -92,6 +93,7 @@ $addressPosition = $shop['customer_address_position'] ?? 'left';
         <div class="ms-section-head"><div><h2>Show / hide defaults</h2><p>Use these defaults for new invoices.</p></div></div>
         <div class="ms-toggle-list">
             <label class="ms-switch"><input type="checkbox" name="invoice_default_gst_enabled" value="1" <?= $yes('invoice_default_gst_enabled')?'checked':'' ?>><span></span><b>Enable GST on new invoices</b></label>
+            <div class="ms-field"><label>Default GST price mode</label><select class="ms-select" name="invoice_default_gst_mode"><option value="inclusive" <?= ($shop['invoice_default_gst_mode'] ?? 'inclusive')==='inclusive'?'selected':'' ?>>Price includes GST</option><option value="exclusive" <?= ($shop['invoice_default_gst_mode'] ?? 'inclusive')==='exclusive'?'selected':'' ?>>GST added to price</option></select></div>
             <label class="ms-switch"><input type="checkbox" name="invoice_default_discount_enabled" value="1" <?= $yes('invoice_default_discount_enabled')?'checked':'' ?>><span></span><b>Enable discount controls</b></label>
             <label class="ms-switch"><input type="checkbox" name="invoice_show_logo" value="1" <?= $yes('invoice_show_logo')?'checked':'' ?>><span></span><b>Show company logo</b></label>
             <label class="ms-switch"><input type="checkbox" name="invoice_show_signature" value="1" <?= $yes('invoice_show_signature')?'checked':'' ?>><span></span><b>Show authorized signature</b></label>
@@ -106,6 +108,21 @@ $addressPosition = $shop['customer_address_position'] ?? 'left';
         </div>
     </section>
 </div>
+
+<section class="ms-card ms-spacer-top">
+    <div class="ms-section-head"><div><h2>Email configuration</h2><p>Optional SMTP settings for future invoice/welcome email delivery. The SMTP password is encrypted before it is stored.</p></div></div>
+    <div class="ms-form-grid">
+        <label class="ms-switch"><input type="checkbox" name="email_enabled" value="1" <?= $yes('email_enabled',0)?'checked':'' ?>><span></span><b>Enable SMTP</b></label>
+        <label class="ms-switch"><input type="checkbox" name="email_invoice_enabled" value="1" <?= $yes('email_invoice_enabled',0)?'checked':'' ?>><span></span><b>Enable invoice email</b></label>
+        <div class="ms-field"><label>SMTP Host</label><input class="ms-input" name="email_smtp_host" value="<?= esc($shop['email_smtp_host'] ?? '') ?>"></div>
+        <div class="ms-field"><label>SMTP Port</label><input class="ms-input" type="number" name="email_smtp_port" value="<?= esc($shop['email_smtp_port'] ?? 587) ?>"></div>
+        <div class="ms-field"><label>SMTP Username</label><input class="ms-input" name="email_smtp_user" value="<?= esc($shop['email_smtp_user'] ?? '') ?>"></div>
+        <div class="ms-field"><label>SMTP Password</label><input class="ms-input" type="password" name="email_smtp_password" autocomplete="new-password" placeholder="Leave blank to keep existing password"></div>
+        <div class="ms-field"><label>Encryption</label><select class="ms-select" name="email_smtp_encryption"><option value="tls" <?= ($shop['email_smtp_encryption'] ?? 'tls')==='tls'?'selected':'' ?>>TLS</option><option value="ssl" <?= ($shop['email_smtp_encryption'] ?? '')==='ssl'?'selected':'' ?>>SSL</option><option value="none" <?= ($shop['email_smtp_encryption'] ?? '')==='none'?'selected':'' ?>>None</option></select></div>
+        <div class="ms-field"><label>From Email</label><input class="ms-input" type="email" name="email_from_address" value="<?= esc($shop['email_from_address'] ?? '') ?>"></div>
+        <div class="ms-field"><label>From Name</label><input class="ms-input" name="email_from_name" value="<?= esc($shop['email_from_name'] ?? ($shop['name'] ?? '')) ?>"></div>
+    </div>
+</section>
 
 <div class="ms-sticky-save">
     <div><strong>Invoice designer</strong><span>Save company details, template and defaults.</span></div>

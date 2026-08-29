@@ -339,6 +339,20 @@ dialog::backdrop { background: var(--ms-overlay); backdrop-filter: blur(3px); }
 .ms-password-toggle { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); min-width: 52px; height: 30px; padding: 0 8px; border-radius: 9px; background: var(--ms-panel); color: var(--ms-muted); cursor: pointer; font-size: 10px; font-weight: 850; }
 .ms-error-list { margin: 0; padding-left: 18px; }
 
+
+.ms-radio-card-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:7px; }
+.ms-radio-card { position:relative; display:flex; align-items:flex-start; gap:10px; min-height:74px; padding:12px 13px; border:1px solid var(--ms-line); border-radius:14px; background:var(--ms-panel-soft); cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, background .15s ease; }
+.ms-radio-card:hover { border-color:var(--ms-line-strong); }
+.ms-radio-card.is-selected { border-color:var(--ms-primary-line); background:var(--ms-primary-soft); box-shadow:0 0 0 2px color-mix(in srgb, var(--ms-primary) 10%, transparent); }
+.ms-radio-card input { position:absolute; opacity:0; pointer-events:none; }
+.ms-radio-mark { flex:0 0 18px; width:18px; height:18px; margin-top:1px; border:2px solid var(--ms-muted); border-radius:50%; background:var(--ms-panel); position:relative; }
+.ms-radio-card.is-selected .ms-radio-mark { border-color:var(--ms-primary); }
+.ms-radio-card.is-selected .ms-radio-mark::after { content:""; position:absolute; inset:4px; border-radius:50%; background:var(--ms-primary); }
+.ms-radio-card input:focus-visible + .ms-radio-mark { outline:3px solid var(--ms-focus); outline-offset:2px; }
+.ms-radio-copy { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.ms-radio-copy strong { font-size:12px; font-weight:850; color:var(--ms-text); }
+.ms-radio-copy small { font-size:10.5px; line-height:1.4; color:var(--ms-muted); }
+@media (max-width:650px){.ms-radio-card-grid{grid-template-columns:1fr}}
 @media (max-width: 1180px) {
     .ms-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .ms-item-grid { grid-template-columns: 1fr 1fr; }

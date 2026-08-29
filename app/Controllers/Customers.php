@@ -6,6 +6,7 @@ use App\Models\CustomerModel;
 
 class Customers extends BaseController
 {
+    private bool $customerCreated = false;
     public function index(): string
     {
         $db=db_connect();
@@ -14,7 +15,7 @@ class Customers extends BaseController
         return view('customers/index',['title'=>'Customers','customers'=>$rows]);
     }
 
-    public function store(){try{$this->saveCustomer();return redirect()->to('/customers')->with('message','Customer saved.');}catch(\Throwable $e){return redirect()->back()->withInput()->with('error',$e->getMessage());}}
+    public function store(){try{$id=$this->saveCustomer();if($this->customerCreated)(new \App\Services\CustomerCommunicationService())->queueWelcome($id);return redirect()->to('/customers')->with('message','Customer saved.');}catch(\Throwable $e){return redirect()->back()->withInput()->with('error',$e->getMessage());}}
 
     public function update(int $id)
     {
@@ -29,7 +30,7 @@ class Customers extends BaseController
 
     public function quickCreate()
     {
-        try {$id=$this->saveCustomer();return $this->response->setJSON(['ok'=>true,'customer'=>(new CustomerModel())->find($id),'csrfToken'=>csrf_token(),'csrfHash'=>csrf_hash()]);}
+        try {$id=$this->saveCustomer();if($this->customerCreated)(new \App\Services\CustomerCommunicationService())->queueWelcome($id);return $this->response->setJSON(['ok'=>true,'customer'=>(new CustomerModel())->find($id),'csrfToken'=>csrf_token(),'csrfHash'=>csrf_hash()]);}
         catch (\Throwable $e) {return $this->response->setStatusCode(422)->setJSON(['ok'=>false,'error'=>$e->getMessage(),'csrfToken'=>csrf_token(),'csrfHash'=>csrf_hash()]);}
     }
 
@@ -39,6 +40,7 @@ class Customers extends BaseController
         if($name===''||$phone==='') throw new \RuntimeException('Name and phone are required.');
         $model=new CustomerModel(); $existing=$model->where('phone',$phone)->first(); if($existing) return (int)$existing['id'];
         $model->insert(['name'=>$name,'phone'=>$phone,'whatsapp_phone'=>trim((string)$this->request->getPost('whatsapp_phone')) ?: $phone,'email'=>trim((string)$this->request->getPost('email')) ?: null,'address'=>trim((string)$this->request->getPost('address')) ?: null,'gstin'=>trim((string)$this->request->getPost('gstin')) ?: null,'notes'=>trim((string)$this->request->getPost('notes')) ?: null]);
+        $this->customerCreated = true;
         return (int)$model->getInsertID();
     }
 }

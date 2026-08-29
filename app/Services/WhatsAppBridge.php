@@ -47,6 +47,15 @@ class WhatsAppBridge
         ]);
     }
 
+    public function sendMedia(string $phone, string $message, string $base64, string $mime, string $filename): array
+    {
+        return $this->request('POST', '/send', [
+            'phone' => $phone,
+            'message' => $message,
+            'media' => ['data' => $base64, 'mimetype' => $mime, 'filename' => $filename],
+        ]);
+    }
+
     public function localUrl(): string
     {
         return $this->url;
