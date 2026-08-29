@@ -54,49 +54,229 @@ class InvoicePdfService
 
     /** Chrome matches the supplied PDF-to-HTML layout, especially its fixed table grid. */
     private function renderWithChrome(string $html, string $outputPath): bool
-    {
-        $chrome = '/usr/bin/google-chrome';
-        if (! is_executable($chrome) || ! function_exists('proc_open')) return false;
+{
+    $chrome = '/usr/bin/google-chrome';
 
-        $workDir = sys_get_temp_dir().'/gst-classic-'.bin2hex(random_bytes(8));
-        if (! @mkdir($workDir, 0700, true)) return false;
-        $htmlPath = $workDir.'/invoice.html';
-        $chromePath = $workDir.'/invoice.pdf';
-        if (@file_put_contents($htmlPath, $html) === false) return false;
-
-        $command = [
-            $chrome, '--headless=new', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-            '--no-pdf-header-footer', '--user-data-dir='.$workDir.'/profile',
-            '--print-to-pdf='.$chromePath, 'file://'.$htmlPath,
-        ];
-        $errorPath = $workDir.'/chrome-error.log';
-        $process = @proc_open($command, [1 => ['file', '/dev/null', 'a'], 2 => ['file', $errorPath, 'a']], $pipes);
-        if (! is_resource($process)) return false;
-        $exitCode = proc_close($process);
-        if ($exitCode !== 0 || ! is_file($chromePath) || filesize($chromePath) === 0) {
-            log_message('error', 'Chrome GST PDF render failed: {error}', ['error' => (string) @file_get_contents($errorPath)]);
-            return false;
-        }
-        return @copy($chromePath, $outputPath);
+    if (!is_file($chrome) || !is_executable($chrome)) {
+        log_message('error', 'GST PDF: Chrome not executable: ' . $chrome);
+        return false;
     }
+
+    $workDir = WRITEPATH . 'uploads/chrome_invoice_' . bin2hex(random_bytes(8));
+
+    if (!@mkdir($workDir, 0775, true)) {
+        log_message('error', 'GST PDF: Cannot create work directory: ' . $workDir);
+        return false;
+    }
+
+    $htmlFile = $workDir . '/invoice.html';
+    $pdfFile  = $workDir . '/invoice.pdf';
+    $profile  = $workDir . '/profile';
+    $logFile  = $workDir . '/chrome.log';
+
+    @mkdir($profile, 0775, true);
+
+    if (@file_put_contents($htmlFile, $html) === false) {
+        log_message('error', 'GST PDF: Cannot write invoice HTML.');
+        return false;
+    }
+
+    /*
+     * Chrome must be able to read the local HTML file.
+     */
+    @chmod($htmlFile, 0644);
+
+    $url = 'file://' . $htmlFile;
+
+    $command =
+        escapeshellarg($chrome)
+        . ' --headless=new'
+        . ' --no-sandbox'
+        . ' --disable-gpu'
+        . ' --disable-dev-shm-usage'
+        . ' --disable-software-rasterizer'
+        . ' --disable-extensions'
+        . ' --disable-background-networking'
+        . ' --disable-sync'
+        . ' --disable-default-apps'
+        . ' --no-first-run'
+        . ' --no-pdf-header-footer'
+        . ' --user-data-dir=' . escapeshellarg($profile)
+        . ' --print-to-pdf=' . escapeshellarg($pdfFile)
+        . ' ' . escapeshellarg($url)
+        . ' > ' . escapeshellarg($logFile)
+        . ' 2>&1';
+
+    /*
+     * Run Chrome.
+     */
+    $output = [];
+    $exitCode = 0;
+
+    exec($command, $output, $exitCode);
+
+    /*
+     * Save Chrome output to CodeIgniter log.
+     */
+    $chromeLog = '';
+
+    if (is_file($logFile)) {
+        $chromeLog = trim((string) @file_get_contents($logFile));
+    }
+
+    if ($exitCode !== 0) {
+        log_message(
+            'error',
+            'GST PDF: Chrome exit code {code}. Output: {output}',
+            [
+                'code'   => $exitCode,
+                'output' => $chromeLog,
+            ]
+        );
+
+        return false;
+    }
+
+    /*
+     * Chrome sometimes returns exit code 0 but fails to create the PDF.
+     */
+    if (!is_file($pdfFile)) {
+        log_message(
+            'error',
+            'GST PDF: Chrome did not create PDF. Output: {output}',
+            [
+                'output' => $chromeLog,
+            ]
+        );
+
+        return false;
+    }
+
+    $size = filesize($pdfFile);
+
+    if ($size === false || $size < 100) {
+        log_message(
+            'error',
+            'GST PDF: Chrome created an invalid PDF. Size: {size}. Output: {output}',
+            [
+                'size'   => $size,
+                'output' => $chromeLog,
+            ]
+        );
+
+        return false;
+    }
+
+    /*
+     * Copy final PDF to invoice storage.
+     */
+    if (!@copy($pdfFile, $outputPath)) {
+        log_message(
+            'error',
+            'GST PDF: Cannot copy PDF to final path: {path}',
+            [
+                'path' => $outputPath,
+            ]
+        );
+
+        return false;
+    }
+
+    if (!is_file($outputPath) || filesize($outputPath) < 100) {
+        log_message(
+            'error',
+            'GST PDF: Final PDF is missing or invalid.'
+        );
+
+        return false;
+    }
+
+    /*
+     * Cleanup.
+     */
+    @unlink($htmlFile);
+    @unlink($pdfFile);
+    @unlink($logFile);
+
+    return true;
+}
 
     /** Dompdf reliably renders PNG data URIs; normalize settings uploads (including WebP). */
-    private function normalisePdfImages(array $shop): array
-    {
-        foreach (['logo', 'signature'] as $asset) {
-            $encoded = trim((string) ($shop[$asset . '_base64'] ?? ''));
-            if ($encoded === '') continue;
-            $encoded = preg_replace('#^data:[^;]+;base64,#i', '', $encoded) ?? '';
-            $binary = base64_decode($encoded, true);
-            if ($binary === false || ! function_exists('imagecreatefromstring')) continue;
-            $image = @imagecreatefromstring($binary);
-            if ($image === false) continue;
-            ob_start(); imagepng($image); $png = ob_get_clean(); imagedestroy($image);
-            if ($png !== false && $png !== '') {
-                $shop[$asset . '_base64'] = base64_encode($png);
-                $shop[$asset . '_mime'] = 'image/png';
-            }
+   private function normalisePdfImages(array $shop): array
+{
+    foreach (['logo', 'signature'] as $asset) {
+
+        $encoded = trim((string) ($shop[$asset . '_base64'] ?? ''));
+
+        if ($encoded === '') {
+            continue;
         }
-        return $shop;
+
+        $encoded = preg_replace(
+            '#^data:[^;]+;base64,#i',
+            '',
+            $encoded
+        ) ?? '';
+
+        $binary = base64_decode($encoded, true);
+
+        if ($binary === false || !function_exists('imagecreatefromstring')) {
+            continue;
+        }
+
+        $image = @imagecreatefromstring($binary);
+
+        if ($image === false) {
+            continue;
+        }
+
+        $width  = imagesx($image);
+        $height = imagesy($image);
+
+        /*
+         * Create a white canvas.
+         * This removes transparent/black background problems
+         * when Chrome generates the PDF.
+         */
+        $canvas = imagecreatetruecolor($width, $height);
+
+        /*
+         * White background.
+         */
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        imagefill($canvas, 0, 0, $white);
+
+        /*
+         * Preserve the original image including transparency
+         * while placing it over the white canvas.
+         */
+        imagealphablending($canvas, true);
+        imagesavealpha($canvas, false);
+
+        imagecopy(
+            $canvas,
+            $image,
+            0,
+            0,
+            0,
+            0,
+            $width,
+            $height
+        );
+
+        ob_start();
+        imagepng($canvas);
+        $png = ob_get_clean();
+
+        imagedestroy($image);
+        imagedestroy($canvas);
+
+        if ($png !== false && $png !== '') {
+            $shop[$asset . '_base64'] = base64_encode($png);
+            $shop[$asset . '_mime'] = 'image/png';
+        }
     }
+
+    return $shop;
+}
 }

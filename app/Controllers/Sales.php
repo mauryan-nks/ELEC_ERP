@@ -124,7 +124,7 @@ class Sales extends BaseController
             ]);
 
             return redirect()->to('/sales/'.$saleId.'/invoice')
-                ->with('error', 'Unable to generate the invoice PDF. Please try again.');
+                ->with('error', 'Unable to generate the invoice PDF. Please try again.'.$e);
         }
     }
 }
