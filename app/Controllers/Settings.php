@@ -17,6 +17,7 @@ class Settings extends BaseController
         'bordered' => 'Clean Border',
         'elegant' => 'Elegant',
         'thermal' => 'Thermal / Narrow',
+        'gst_classic' => 'GST Classic',
     ];
 
     public function index(): string

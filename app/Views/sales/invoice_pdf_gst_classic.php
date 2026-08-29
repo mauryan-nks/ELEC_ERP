@@ -31,8 +31,6 @@ $taxTotal   = (float)($sale['tax_total'] ?? 0);
 $gstEnabled = !empty($cfg['gst_enabled']);
 $gstMode    = (string)($cfg['gst_mode'] ?? 'inclusive');
 
-$cgstTotal = round($taxTotal / 2, 2);
-$sgstTotal = round($taxTotal - $cgstTotal, 2);
 
 /* Number to words in Indian numbering format. */
 $numberToWords = static function (int $number) use (&$numberToWords): string {
@@ -68,6 +66,14 @@ $customerName    = trim((string)($sale['customer_name'] ?? ''));
 $customerPhone   = trim((string)($sale['customer_phone'] ?? ''));
 $customerAddress = trim((string)($sale['customer_address'] ?? ''));
 $customerGstin   = trim((string)($sale['customer_gstin'] ?? ''));
+
+/* Same GST state = CGST + SGST; different valid state codes = IGST. */
+$sellerState = preg_match('/^\\d{2}/', $companyGstin, $m) ? $m[0] : '';
+$customerState = preg_match('/^\\d{2}/', $customerGstin, $m) ? $m[0] : '';
+$isInterState = $gstEnabled && $sellerState !== '' && $customerState !== '' && $sellerState !== $customerState;
+$igstTotal = $isInterState ? $taxTotal : 0.0;
+$cgstTotal = $isInterState ? 0.0 : round($taxTotal / 2, 2);
+$sgstTotal = $isInterState ? 0.0 : round($taxTotal - $cgstTotal, 2);
 
 $placeOfSupply = trim((string)($sale['place_of_supply'] ?? $shop['place_of_supply'] ?? ''));
 $reverseCharge = trim((string)($sale['reverse_charge'] ?? 'N')) ?: 'N';
@@ -126,36 +132,23 @@ foreach ($items as $item) {
     $key = number_format($rate, 2, '.', '');
 
     if (!isset($taxSummary[$key])) {
-        $taxSummary[$key] = ['rate'=>$rate, 'taxable'=>0.0, 'cgst'=>0.0, 'sgst'=>0.0, 'tax'=>0.0];
+        $taxSummary[$key] = ['rate'=>$rate, 'taxable'=>0.0, 'cgst'=>0.0, 'sgst'=>0.0, 'igst'=>0.0, 'tax'=>0.0];
     }
     $taxSummary[$key]['taxable'] += $taxable;
-    $taxSummary[$key]['cgst'] += $cgst;
-    $taxSummary[$key]['sgst'] += $sgst;
+    $taxSummary[$key]['cgst'] += $isInterState ? 0.0 : $cgst;
+    $taxSummary[$key]['sgst'] += $isInterState ? 0.0 : $sgst;
+    $taxSummary[$key]['igst'] += $isInterState ? $lineTax : 0.0;
     $taxSummary[$key]['tax'] += $lineTax;
 }
 foreach ($taxSummary as &$s) {
     $s['taxable'] = round($s['taxable'], 2);
     $s['cgst'] = round($s['cgst'], 2);
     $s['sgst'] = round($s['sgst'], 2);
+    $s['igst'] = round($s['igst'], 2);
     $s['tax'] = round($s['tax'], 2);
 }
 unset($s);
 
-/* Terms: preserve configured text, but render newline-separated lines as the reference does. */
-$termLines = [];
-if ($terms !== '') {
-    foreach (preg_split('/\R+/', $terms) ?: [] as $line) {
-        $line = trim($line);
-        if ($line !== '') $termLines[] = preg_replace('/^\d+[.)]\s*/', '', $line);
-    }
-}
-if ($termLines === []) {
-    $termLines = [
-        'Goods once sold will not be taken back.',
-        'Interest @ 18% p.a. will be charged if the payment is not made within the stipulated time.',
-        'Subject to jurisdiction of the place of supply only.'
-    ];
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -219,7 +212,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size:9px; }
 
 /* TAX SUMMARY */
 .tax-section { height:22mm; padding:2mm 1.5mm 0; }
-.tax-summary { border-collapse:collapse; width:48%; }
+.tax-summary { border-collapse:collapse; table-layout:fixed; width:80mm; }
 .tax-summary th, .tax-summary td { padding:0.7mm 1mm; font-size:9px; text-align:right; }
 .tax-summary th { text-decoration:underline; text-align:center; }
 .tax-summary td:first-child { text-align:left; }
@@ -233,7 +226,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size:9px; }
 .bottom { display:table; width:100%; table-layout:fixed; height:36mm; }
 .bottom-left, .bottom-right { display:table-cell; vertical-align:top; }
 .bottom-left { width:46%; border-right:1px solid #111; }
-.bottom-right { width:54%; position:relative; }
+.bottom-right { width:54%; position:relative; padding:0 3mm; }
 .terms { padding:1.5mm; font-size:9px; line-height:13px; }
 .terms-title { font-size:10px; font-weight:700; text-decoration:underline; margin-bottom:1mm; }
 .terms ol { margin:0; padding-left:5mm; }
@@ -241,8 +234,8 @@ body { font-family: Arial, Helvetica, sans-serif; font-size:9px; }
 .eoe { margin-top:1mm; }
 .receiver { padding:2mm 1.5mm; font-weight:700; }
 .receiver-line { margin-top:9mm; }
-.auth { position:absolute; left:0; right:0; bottom:1.5mm; text-align:right; padding-right:4mm; font-size:12px; font-weight:700; }
-.auth img { display:block; width:34mm; height:18mm; object-fit:contain; margin:0 2mm 0 auto; }
+.auth { position:absolute; left:0; right:0; bottom:1.5mm; text-align:right; padding:1mm 3mm 0; border-top:1px solid #111; font-size:12px; font-weight:700; }
+.auth img { display:block; width:42mm; height:18mm; object-fit:contain; margin:0 0 0 auto; }
 .auth-name { margin-top:0.5mm; }
 
 @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
@@ -304,10 +297,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size:9px; }
                 <th class="qty">Qty.</th>
                 <th class="unit">Unit</th>
                 <th class="price">Price</th>
-                <th class="rate">CGST<br>Rate</th>
-                <th class="taxamt">CGST<br>Amount</th>
-                <th class="rate">SGST<br>Rate</th>
-                <th class="taxamt">SGST<br>Amount</th>
+                <?php if ($isInterState): ?><th class="rate">IGST<br>Rate</th><th class="taxamt">IGST<br>Amount</th><th class="rate"></th><th class="taxamt"></th><?php else: ?><th class="rate">CGST<br>Rate</th><th class="taxamt">CGST<br>Amount</th><th class="rate">SGST<br>Rate</th><th class="taxamt">SGST<br>Amount</th><?php endif; ?>
                 <th class="amount">Amount<br>(<?= $e($currencySymbol) ?>)</th>
             </tr>
         </thead>
@@ -348,10 +338,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size:9px; }
                 <td class="c"><?= $num($qty, 2) ?></td>
                 <td class="c">Pcs.</td>
                 <td class="r"><?= $num($unitPrice, 2) ?></td>
-                <td class="c"><?= ($gstEnabled && $rate > 0) ? $num($rate/2, 2) . ' %' : '-' ?></td>
-                <td class="r"><?= ($gstEnabled && $lineTax > 0) ? $num($cgst, 2) : '-' ?></td>
-                <td class="c"><?= ($gstEnabled && $rate > 0) ? $num($rate/2, 2) . ' %' : '-' ?></td>
-                <td class="r"><?= ($gstEnabled && $lineTax > 0) ? $num($sgst, 2) : '-' ?></td>
+                <?php if ($isInterState): ?><td class="c"><?= ($gstEnabled && $rate > 0) ? $num($rate, 2) . ' %' : '-' ?></td><td class="r"><?= ($gstEnabled && $lineTax > 0) ? $num($lineTax, 2) : '-' ?></td><td></td><td></td><?php else: ?><td class="c"><?= ($gstEnabled && $rate > 0) ? $num($rate/2, 2) . ' %' : '-' ?></td><td class="r"><?= ($gstEnabled && $lineTax > 0) ? $num($cgst, 2) : '-' ?></td><td class="c"><?= ($gstEnabled && $rate > 0) ? $num($rate/2, 2) . ' %' : '-' ?></td><td class="r"><?= ($gstEnabled && $lineTax > 0) ? $num($sgst, 2) : '-' ?></td><?php endif; ?>
                 <td class="r"><?= $num($lineTotal, 2) ?></td>
             </tr>
             <?php endforeach; ?>
@@ -362,10 +349,7 @@ body { font-family: Arial, Helvetica, sans-serif; font-size:9px; }
                 <td colspan="3" class="grand-label">Grand Total</td>
                 <td class="c"><?= $num($totalQty, 2) ?></td>
                 <td class="c">Pcs.</td>
-                <td></td><td></td>
-                <td class="r"><?= $num($cgstTotal, 2) ?></td>
-                <td></td>
-                <td class="r"><?= $num($sgstTotal, 2) ?></td>
+                <?php if ($isInterState): ?><td></td><td class="r"><?= $num($igstTotal, 2) ?></td><td></td><td></td><td></td><?php else: ?><td></td><td></td><td class="r"><?= $num($cgstTotal, 2) ?></td><td></td><td class="r"><?= $num($sgstTotal, 2) ?></td><?php endif; ?>
                 <td class="r"><?= $num($grandTotal, 2) ?></td>
             </tr>
         </tfoot>
@@ -373,10 +357,11 @@ body { font-family: Arial, Helvetica, sans-serif; font-size:9px; }
 
     <div class="tax-section">
         <table class="tax-summary">
-            <thead><tr><th>Tax Rate</th><th>Taxable Amt.</th><th>CGST Amt.</th><th>SGST Amt.</th><th>Total Tax</th></tr></thead>
+            <colgroup><col style="width:16mm"><col style="width:19mm"><col style="width:15mm"><col style="width:15mm"><col style="width:15mm"></colgroup>
+            <thead><tr><th>Tax Rate</th><th>Taxable Amt.</th><?php if ($isInterState): ?><th>IGST Amt.</th><?php else: ?><th>CGST Amt.</th><th>SGST Amt.</th><?php endif; ?><th>Total Tax</th></tr></thead>
             <tbody>
             <?php if ($taxSummary): foreach ($taxSummary as $s): ?>
-                <tr><td><?= $num($s['rate'], 0) ?>%</td><td><?= $num($s['taxable']) ?></td><td><?= $num($s['cgst']) ?></td><td><?= $num($s['sgst']) ?></td><td><?= $num($s['tax']) ?></td></tr>
+                <tr><td><?= $num($s['rate'], 0) ?>%</td><td><?= $num($s['taxable']) ?></td><?php if ($isInterState): ?><td><?= $num($s['igst']) ?></td><?php else: ?><td><?= $num($s['cgst']) ?></td><td><?= $num($s['sgst']) ?></td><?php endif; ?><td><?= $num($s['tax']) ?></td></tr>
             <?php endforeach; else: ?>
                 <tr><td colspan="5" style="text-align:left">No GST</td></tr>
             <?php endif; ?>
@@ -392,18 +377,14 @@ body { font-family: Arial, Helvetica, sans-serif; font-size:9px; }
     <div class="bottom">
         <div class="bottom-left">
             <div class="terms">
-                <div class="terms-title">Terms &amp; Conditions</div>
-                <div>E. &amp; O.E.</div>
-                <ol>
-                    <?php foreach ($termLines as $line): ?><li><?= $e($line) ?></li><?php endforeach; ?>
-                </ol>
+                <?= $terms !== '' ? nl2br($e($terms)) : '' ?>
                 <?php if ($footer !== ''): ?><div style="margin-top:1mm"><?= nl2br($e($footer)) ?></div><?php endif; ?>
             </div>
         </div>
         <div class="bottom-right">
             <div class="receiver">Receiver's Signature &nbsp;&nbsp; :</div>
             <div class="auth">
-                <?php if (!empty($cfg['show_signature']) && $signatureSrc !== ''): ?><img src="<?= $e($signatureSrc) ?>" alt="Signature"><?php endif; ?>
+                <?php if ($signatureSrc !== ''): ?><img src="<?= $e($signatureSrc) ?>" alt="Signature"><?php endif; ?>
                 <div>for <?= $e($companyName) ?></div>
                 <div class="auth-name">Authorised Signatory</div>
             </div>

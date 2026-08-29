@@ -2,7 +2,7 @@
 <?= $this->section('content') ?>
 <?php
 $cfg=$invoiceConfig??[];
-$template=in_array($cfg['template']??'classic',['classic','modern','minimal','compact','executive','retail','bold','bordered','elegant','thermal'],true)?$cfg['template']:'classic';
+$template=in_array($cfg['template']??'classic',['classic','modern','minimal','compact','executive','retail','bold','bordered','elegant','thermal','gst_classic'],true)?$cfg['template']:'classic';
 $gstEnabled=(bool)($cfg['gst_enabled']??false);
 $showLogo=(bool)($cfg['show_logo']??true) && !empty($shop['logo_base64']);
 $showSignature=(bool)($cfg['show_signature']??true) && !empty($shop['signature_base64']);
@@ -24,7 +24,7 @@ $moneyPrefix=$currency==='INR'?'₹':esc($currency).' ';
 $lineDiscount=(float)($sale['line_discount_total']??$sale['discount_total']??0);
 $overallDiscount=(float)($sale['overall_discount_amount']??0);
 ?>
-<div class="ms-no-print ms-page-head"><div><h1><?= esc($sale['invoice_no']) ?></h1><p><?= esc($cfg['title']??'Invoice') ?> · <?= esc(ucfirst($template)) ?> template · <?= $gstEnabled?'GST enabled':'GST not applied' ?></p></div><div class="ms-actions"><a class="ms-btn ms-btn-secondary" href="<?= site_url('sales') ?>">Back</a><?php if((float)$sale['due_amount']>0): ?><button class="ms-btn ms-btn-secondary" type="button" data-open-dialog="paymentDialog">+ Record Payment</button><?php endif; ?><button class="ms-btn ms-btn-primary" type="button" onclick="window.print()">Print / Save PDF</button></div></div>
+<div class="ms-no-print ms-page-head"><div><h1><?= esc($sale['invoice_no']) ?></h1><p><?= esc($cfg['title']??'Invoice') ?> · <?= esc(ucfirst(str_replace('_', ' ', $template))) ?> template · <?= $gstEnabled?'GST enabled':'GST not applied' ?></p></div><div class="ms-actions"><a class="ms-btn ms-btn-secondary" href="<?= site_url('sales') ?>">Back</a><?php if((float)$sale['due_amount']>0): ?><button class="ms-btn ms-btn-secondary" type="button" data-open-dialog="paymentDialog">+ Record Payment</button><?php endif; ?><?php if($template === 'gst_classic'): ?><a class="ms-btn ms-btn-primary" href="<?= site_url('sales/'.$sale['id'].'/invoice/pdf') ?>" target="_blank" rel="noopener">Open GST PDF</a><?php endif; ?><button class="ms-btn ms-btn-secondary" type="button" onclick="window.print()">Print / Save PDF</button></div></div>
 
 <article class="ms-invoice invoice-theme-<?= esc($template) ?>" style="--inv-accent:<?= esc($invoiceColor) ?>" id="printInvoice">
     <header class="inv-header">

@@ -35,6 +35,7 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->get('sales', 'Sales::index', ['filter' => 'permission:sales.view']);
     $routes->get('sales/new', 'Sales::create', ['filter' => 'permission:sales.create']);
     $routes->post('sales', 'Sales::store', ['filter' => 'permission:sales.create']);
+    $routes->get('sales/(:num)/invoice/pdf', 'Sales::pdf/$1', ['filter' => 'permission:sales.view']);
     $routes->get('sales/(:num)/invoice', 'Sales::invoice/$1', ['filter' => 'permission:sales.view']);
     $routes->post('sales/(:num)/payments', 'Sales::addPayment/$1', ['filter' => 'permission:sales.view']);
     $routes->get('inventory/available/(:num)', 'Sales::availableUnits/$1', ['filter' => 'permission:sales.create']);

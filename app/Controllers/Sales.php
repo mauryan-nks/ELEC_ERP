@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Services\InventoryService;
+use App\Services\InvoicePdfService;
 use App\Services\SaleService;
 
 class Sales extends BaseController
@@ -25,7 +26,7 @@ class Sales extends BaseController
             'shop'=>$db->table('shop_settings')->where('id',1)->get()->getRowArray() ?? [],
             'invoiceTemplates'=>[
                 'classic'=>'Classic','modern'=>'Modern','minimal'=>'Minimal','compact'=>'Compact','executive'=>'Executive',
-                'retail'=>'Retail Pro','bold'=>'Bold Header','bordered'=>'Clean Border','elegant'=>'Elegant','thermal'=>'Thermal / Narrow',
+                'retail'=>'Retail Pro','bold'=>'Bold Header','bordered'=>'Clean Border','elegant'=>'Elegant','thermal'=>'Thermal / Narrow','gst_classic'=>'GST Classic',
             ],
         ]);
     }
@@ -99,5 +100,31 @@ class Sales extends BaseController
         ],$invoiceConfig);
         $payments=$db->table('payments')->where('sale_id',$saleId)->orderBy('paid_at','ASC')->get()->getResultArray();
         return view('sales/invoice',['title'=>'Invoice '.$sale['invoice_no'],'sale'=>$sale,'items'=>$items,'shop'=>$shop,'payments'=>$payments,'invoiceConfig'=>$invoiceConfig]);
+    }
+
+    /** Serve the dedicated invoice renderer instead of browser-printing the app UI. */
+    public function pdf(int $saleId)
+    {
+        try {
+            $path = (new InvoicePdfService())->generate($saleId);
+            if (! is_file($path)) {
+                throw new \RuntimeException('Invoice PDF could not be generated.');
+            }
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="'.basename($path).'"')
+                ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                ->setHeader('Pragma', 'no-cache')
+                ->setBody((string) file_get_contents($path));
+        } catch (\Throwable $e) {
+            log_message('error', 'Invoice PDF generation failed for sale {saleId}: {message}', [
+                'saleId' => $saleId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return redirect()->to('/sales/'.$saleId.'/invoice')
+                ->with('error', 'Unable to generate the invoice PDF. Please try again.');
+        }
     }
 }

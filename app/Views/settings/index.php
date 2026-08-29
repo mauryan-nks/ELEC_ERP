@@ -50,8 +50,8 @@ $addressPosition = $shop['customer_address_position'] ?? 'left';
 
 <section class="ms-card ms-spacer-top">
     <div class="ms-section-head">
-        <div><h2>Invoice designer</h2><p>Choose one of 10 built-in invoice styles. The selected template becomes the default for new invoices.</p></div>
-        <span class="ms-badge is-neutral">10 templates</span>
+        <div><h2>Invoice designer</h2><p>Choose one of 11 built-in invoice styles. The selected template becomes the default for new invoices.</p></div>
+        <span class="ms-badge is-neutral">11 templates</span>
     </div>
     <div class="ms-invoice-template-grid">
         <?php $n=0; foreach ($invoiceTemplates as $key => $label): $n++; ?>

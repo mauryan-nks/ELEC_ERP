@@ -104,7 +104,7 @@ class SaleService
             $invoiceNo=$numbers->next('invoice');
 
             $template=(string)($data['invoice_template']??($shop['invoice_template']??'classic'));
-            $allowedTemplates=['classic','modern','minimal','compact','executive','retail','bold','bordered','elegant','thermal'];
+            $allowedTemplates=['classic','modern','minimal','compact','executive','retail','bold','bordered','elegant','thermal','gst_classic'];
             if(!in_array($template,$allowedTemplates,true)) $template='classic';
             $addressPosition=(string)($data['customer_address_position']??($shop['customer_address_position']??'left'));
             if(!in_array($addressPosition,['left','right','full','hidden'],true)) $addressPosition='left';

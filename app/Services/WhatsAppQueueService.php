@@ -12,7 +12,8 @@ class WhatsAppQueueService
             $db->table('whatsapp_queue')->where(['id'=>$row['id'],'status'=>'queued'])->update(['status'=>'processing','attempts'=>(int)$row['attempts']+1,'updated_at'=>date('Y-m-d H:i:s')]);
             try{
                 if (($row['message_type'] ?? 'text') === 'media' && $row['event_key'] === 'invoice_sent_pdf' && empty($row['attachment_path']) && !empty($row['sale_id'])) {
-                    $pdfPath=(new InvoicePdfService())->generate((int)$row['sale_id']);
+                    // WhatsApp invoices always use the statutory GST Classic layout.
+                    $pdfPath=(new InvoicePdfService())->generate((int)$row['sale_id'], true);
                     $db->table('whatsapp_queue')->where('id',$row['id'])->update(['attachment_path'=>$pdfPath,'attachment_mime'=>'application/pdf','attachment_name'=>basename($pdfPath),'updated_at'=>date('Y-m-d H:i:s')]);
                     $row['attachment_path']=$pdfPath; $row['attachment_mime']='application/pdf'; $row['attachment_name']=basename($pdfPath);
                 }
