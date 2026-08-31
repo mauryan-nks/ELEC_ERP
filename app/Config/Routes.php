@@ -31,6 +31,17 @@ $routes->group('', ['filter' => 'session'], static function (RouteCollection $ro
     $routes->post('purchases', 'Purchases::store', ['filter' => 'permission:purchases.create']);
     $routes->get('purchases/(:num)', 'Purchases::show/$1', ['filter' => 'permission:purchases.view']);
     $routes->post('purchases/(:num)/payments', 'Purchases::addPayment/$1', ['filter' => 'permission:purchases.create']);
+    
+    $routes->post(
+            'purchases/scan',
+            'Purchases::scan',
+            ['filter' => 'permission:purchases.create']
+        );
+    $routes->post(
+                'purchases/check-identifier',
+                'Purchases::checkIdentifier',
+                ['filter' => 'permission:purchases.create']
+            );
 
     $routes->get('sales', 'Sales::index', ['filter' => 'permission:sales.view']);
     $routes->get('sales/new', 'Sales::create', ['filter' => 'permission:sales.create']);

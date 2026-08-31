@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Services\PurchaseService;
+use App\Services\InventoryService;
 
 class Purchases extends BaseController
 {
@@ -37,4 +38,104 @@ class Purchases extends BaseController
         $units=$db->table('inventory_units u')->select('u.*,l.product_id')->join('stock_lots l','l.id=u.stock_lot_id')->where(['l.origin_type'=>'purchase','l.source_id'=>$id])->orderBy('u.id')->get()->getResultArray();$unitMap=[];foreach($units as $u)$unitMap[(int)$u['product_id']][]=$u;
         $payments=$db->table('payments')->where('purchase_id',$id)->orderBy('paid_at')->get()->getResultArray();return view('purchases/show',['title'=>'Purchase '.$purchase['purchase_no'],'purchase'=>$purchase,'items'=>$items,'unitMap'=>$unitMap,'payments'=>$payments]);
     }
+    
+    public function scan()
+{
+    $code = trim((string) $this->request->getPost('code'));
+
+    if ($code === '') {
+        return $this->response
+            ->setStatusCode(422)
+            ->setJSON([
+                'ok' => false,
+                'error' => 'Scanned code is empty.',
+                'csrfHash' => csrf_hash(),
+            ]);
+    }
+
+    $db = db_connect();
+
+    $product = $db->table('products p')
+        ->select('p.id,p.sku,p.name,p.model,p.product_type,p.is_serialized,p.serial_mode,p.tax_percent,p.default_sale_price')
+        ->where('p.status', 'active')
+        ->where('p.sku', $code)
+        ->get()
+        ->getRowArray();
+
+    if (!$product) {
+        return $this->response
+            ->setStatusCode(404)
+            ->setJSON([
+                'ok' => false,
+                'error' => 'No active product found for barcode/SKU: ' . $code,
+                'csrfHash' => csrf_hash(),
+            ]);
+    }
+
+    $displayName = trim(
+        ($product['name'] ?? '') .
+        ' ' .
+        ($product['model'] ?? '')
+    );
+
+    return $this->response->setJSON([
+        'ok' => true,
+        'csrfHash' => csrf_hash(),
+        'product' => [
+            'id' => (int) $product['id'],
+            'sku' => $product['sku'],
+            'name' => $displayName,
+            'product_type' => $product['product_type'],
+            'is_serialized' => (int) $product['is_serialized'],
+            'serial_mode' => $product['serial_mode'],
+            'tax_percent' => (float) $product['tax_percent'],
+            'unit_cost' => 0,
+            'sale_price' => $product['default_sale_price'],
+        ],
+    ]);
+}
+public function checkIdentifier()
+{
+    $identifier = trim(
+        (string)$this->request->getPost('identifier')
+    );
+
+    if ($identifier === '') {
+        return $this->response
+            ->setStatusCode(422)
+            ->setJSON([
+                'ok' => false,
+                'duplicate' => false,
+                'error' => 'Identifier is empty.',
+                'csrfHash' => csrf_hash(),
+            ]);
+    }
+
+    $inventory = new InventoryService();
+
+    $duplicate =
+        $inventory->findDuplicateIdentifier(
+            $identifier
+        );
+
+    if ($duplicate) {
+
+        return $this->response->setJSON([
+            'ok' => true,
+            'duplicate' => true,
+            'message' =>
+                $inventory->duplicateMessage(
+                    $identifier
+                ),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
+    return $this->response->setJSON([
+        'ok' => true,
+        'duplicate' => false,
+        'message' => 'Identifier is available.',
+        'csrfHash' => csrf_hash(),
+    ]);
+}
 }

@@ -1,16 +1,261 @@
 <?= $this->extend('layouts/main') ?><?= $this->section('content') ?>
-<div class="ms-page-head"><div><h1>Receive purchase</h1><p>Add quantity and, for tracked devices/accessories, one IMEI/serial row for every physical unit.</p></div><a class="ms-btn ms-btn-secondary" href="<?= site_url('purchases') ?>">Purchase history</a></div>
+<div class="ms-page-head">
+    <div>
+        <h1>Receive purchase</h1>
+        <p>Add quantity and, for tracked devices/accessories, one IMEI/serial row for every physical unit.</p>
+    </div><a class="ms-btn ms-btn-secondary" href="<?= site_url('purchases') ?>">Purchase history</a>
+</div>
 <form method="post" action="<?= site_url('purchases') ?>" id="purchaseForm"><?= csrf_field() ?>
-<div class="ms-card"><div class="ms-form-grid"><div class="ms-field"><label>Supplier</label><div class="ms-actions ms-nowrap"><select class="ms-select" id="supplierSelect" name="supplier_id"><option value="">Unspecified supplier</option><?php foreach($suppliers as $s): ?><option value="<?= $s['id'] ?>"><?= esc($s['name']) ?></option><?php endforeach; ?></select><button class="ms-btn ms-btn-secondary" type="button" data-open-dialog="supplierQuickDialog">+ Add</button></div></div><div class="ms-field"><label>Supplier invoice no.</label><input class="ms-input" name="supplier_invoice_no"></div><div class="ms-field"><label>Purchase date</label><input class="ms-input" type="date" name="purchase_date" value="<?= date('Y-m-d') ?>"></div><div class="ms-field"><label>Amount paid now</label><input class="ms-input" type="number" step="0.01" min="0" name="paid_amount" value="0"></div><div class="ms-field"><label>Payment method</label><select class="ms-select" name="payment_method"><option>cash</option><option>upi</option><option>card</option><option>bank</option><option>credit</option><option>other</option></select></div><div class="ms-field"><label>Payment reference</label><input class="ms-input" name="payment_reference"></div><div class="ms-field ms-full"><label>Internal purchase notes</label><textarea class="ms-textarea" name="notes"></textarea></div></div></div>
-<div class="ms-page-head ms-spacer-top"><div><h2 class="ms-section-title">Purchase items</h2><p>Serialized products automatically open per-unit IMEI / ID fields.</p></div><button class="ms-btn ms-btn-secondary" type="button" onclick="addPurchaseRow()">+ Add item</button></div>
-<div id="purchaseRows"></div><div class="ms-card"><button class="ms-btn ms-btn-primary" type="submit">Save purchase & receive stock</button></div></form>
-<dialog id="supplierQuickDialog"><div class="ms-dialog-body"><div class="ms-dialog-head"><h3>Add supplier/source</h3><button class="ms-btn ms-btn-secondary is-sm" type="button" data-close-dialog>Close</button></div><form id="quickSupplier"><div class="ms-form-grid"><div class="ms-field"><label>Name *</label><input class="ms-input" name="name" required></div><div class="ms-field"><label>Type</label><select class="ms-select" name="supplier_type"><option value="vendor">Vendor</option><option value="other_store">Other store</option><option value="individual">Individual</option></select></div><div class="ms-field"><label>Phone</label><input class="ms-input" name="phone"></div><div class="ms-field"><label>GSTIN</label><input class="ms-input" name="gstin"></div><div class="ms-field ms-full"><button class="ms-btn ms-btn-primary">Add Supplier</button></div></div></form></div></dialog>
-<template id="purchaseRowTemplate"><div class="ms-item-card purchase-row"><div class="ms-item-grid"><div class="ms-field"><label>Product *</label><select class="ms-select product-select" required><option value="">Select product</option><?php foreach($products as $p): ?><option value="<?= $p['id'] ?>" data-serialized="<?= (int)$p['is_serialized'] ?>" data-tax="<?= esc($p['tax_percent']) ?>"><?= esc(trim(($p['brand_name']??'').' '.$p['name'].' '.($p['model']??''))) ?><?= $p['is_serialized']?' · tracked':'' ?></option><?php endforeach; ?></select></div><div class="ms-field"><label>Qty *</label><input class="ms-input qty" type="number" min="1" step="1" value="1" required></div><div class="ms-field"><label>Unit cost *</label><input class="ms-input cost" type="number" min="0" step="0.01" required></div><div class="ms-field"><label>Tax %</label><input class="ms-input tax" type="number" min="0" step="0.001" value="0"></div><button class="ms-btn is-danger is-sm remove-row" type="button">Remove</button></div><div class="serial-container"></div></div></template>
+    <div class="ms-card">
+        <div class="ms-form-grid">
+            <div class="ms-field"><label>Supplier</label>
+                <div class="ms-actions ms-nowrap"><select class="ms-select" id="supplierSelect" name="supplier_id">
+                        <option value="">Unspecified supplier</option><?php foreach ($suppliers as $s): ?><option value="<?= $s['id'] ?>"><?= esc($s['name']) ?></option><?php endforeach; ?>
+                    </select><button class="ms-btn ms-btn-secondary" type="button" data-open-dialog="supplierQuickDialog">+ Add</button></div>
+            </div>
+            <div class="ms-field"><label>Supplier invoice no.</label><input class="ms-input" name="supplier_invoice_no"></div>
+            <div class="ms-field"><label>Purchase date</label><input class="ms-input" type="date" name="purchase_date" value="<?= date('Y-m-d') ?>"></div>
+            <div class="ms-field"><label>Amount paid now</label><input class="ms-input" type="number" step="0.01" min="0" name="paid_amount" value="0"></div>
+            <div class="ms-field"><label>Payment method</label><select class="ms-select" name="payment_method">
+                    <option>cash</option>
+                    <option>upi</option>
+                    <option>card</option>
+                    <option>bank</option>
+                    <option>credit</option>
+                    <option>other</option>
+                </select></div>
+            <div class="ms-field"><label>Payment reference</label><input class="ms-input" name="payment_reference"></div>
+            <div class="ms-field ms-full"><label>Internal purchase notes</label><textarea class="ms-textarea" name="notes"></textarea></div>
+        </div>
+    </div>
+    <div class="ms-page-head ms-spacer-top">
+        <div>
+            <h2 class="ms-section-title">Purchase items</h2>
+            <p>Serialized products automatically open per-unit IMEI / ID fields.</p>
+        </div><button class="ms-btn ms-btn-secondary" type="button" onclick="addPurchaseRow()">+ Add item</button>
+    </div>
+    <div id="purchaseRows"></div>
+    <div class="ms-card"><button class="ms-btn ms-btn-primary" type="submit">Save purchase & receive stock</button></div>
+</form>
+<dialog id="supplierQuickDialog">
+    <div class="ms-dialog-body">
+        <div class="ms-dialog-head">
+            <h3>Add supplier/source</h3><button class="ms-btn ms-btn-secondary is-sm" type="button" data-close-dialog>Close</button>
+        </div>
+        <form id="quickSupplier">
+            <div class="ms-form-grid">
+                <div class="ms-field"><label>Name *</label><input class="ms-input" name="name" required></div>
+                <div class="ms-field"><label>Type</label><select class="ms-select" name="supplier_type">
+                        <option value="vendor">Vendor</option>
+                        <option value="other_store">Other store</option>
+                        <option value="individual">Individual</option>
+                    </select></div>
+                <div class="ms-field"><label>Phone</label><input class="ms-input" name="phone"></div>
+                <div class="ms-field"><label>GSTIN</label><input class="ms-input" name="gstin"></div>
+                <div class="ms-field ms-full"><button class="ms-btn ms-btn-primary">Add Supplier</button></div>
+            </div>
+        </form>
+    </div>
+</dialog>
+<template id="purchaseRowTemplate">
+    <div class="ms-item-card purchase-row">
+        <div class="ms-item-grid">
+            <div class="ms-field"><label>Product *</label><select class="ms-select product-select" required>
+                    <option value="">Select product</option><?php foreach ($products as $p): ?><option value="<?= $p['id'] ?>" data-serialized="<?= (int)$p['is_serialized'] ?>" data-tax="<?= esc($p['tax_percent']) ?>"><?= esc(trim(($p['brand_name'] ?? '') . ' ' . $p['name'] . ' ' . ($p['model'] ?? ''))) ?><?= $p['is_serialized'] ? ' · tracked' : '' ?></option><?php endforeach; ?>
+                </select></div>
+            <div class="ms-field"><label>Qty *</label><input class="ms-input qty" type="number" min="1" step="1" value="1" required></div>
+            <div class="ms-field"><label>Unit cost *</label><input class="ms-input cost" type="number" min="0" step="0.01" required></div>
+            <div class="ms-field"><label>Tax %</label><input class="ms-input tax" type="number" min="0" step="0.001" value="0"></div><button class="ms-btn is-danger is-sm remove-row" type="button">Remove</button>
+        </div>
+        <div class="serial-container"></div>
+    </div>
+</template>
 <?= $this->endSection() ?>
 <?= $this->section('scripts') ?><script>
-let purchaseIndex=0;
-function addPurchaseRow(){const t=document.getElementById('purchaseRowTemplate');const node=t.content.firstElementChild.cloneNode(true);const i=purchaseIndex++;const product=node.querySelector('.product-select'),qty=node.querySelector('.qty'),cost=node.querySelector('.cost'),tax=node.querySelector('.tax');product.name=`items[${i}][product_id]`;qty.name=`items[${i}][qty]`;cost.name=`items[${i}][unit_cost]`;tax.name=`items[${i}][tax_percent]`;product.addEventListener('change',()=>{const o=product.selectedOptions[0];tax.value=o?.dataset.tax||0;renderPurchaseUnits(node,i)});qty.addEventListener('input',()=>renderPurchaseUnits(node,i));node.querySelector('.remove-row').onclick=()=>node.remove();document.getElementById('purchaseRows').appendChild(node)}
-function renderPurchaseUnits(row,i){const product=row.querySelector('.product-select');const o=product.selectedOptions[0];const box=row.querySelector('.serial-container');const serialized=o?.dataset.serialized==='1';box.innerHTML='';if(!serialized)return;let qty=Math.max(1,parseInt(row.querySelector('.qty').value||1,10));row.querySelector('.qty').step='1';const wrap=document.createElement('div');wrap.className='ms-internal';wrap.innerHTML='<strong>Unit identities</strong><div class="ms-help">Enter at least one identifier for each physical unit. Dual-SIM phones can use both IMEI fields.</div>';for(let u=0;u<qty;u++){const r=document.createElement('div');r.className='serial-row';r.innerHTML=`<input class="ms-input" name="items[${i}][units][${u}][imei1]" placeholder="IMEI 1"><input class="ms-input" name="items[${i}][units][${u}][imei2]" placeholder="IMEI 2"><input class="ms-input" name="items[${i}][units][${u}][serial_no]" placeholder="Serial no."><input class="ms-input" name="items[${i}][units][${u}][unique_id]" placeholder="Unique ID"><input class="ms-input" name="items[${i}][units][${u}][color]" placeholder="Color"><input class="ms-input" name="items[${i}][units][${u}][storage_variant]" placeholder="Variant / storage">`;wrap.appendChild(r)}box.appendChild(wrap)}
-document.getElementById('quickSupplier').addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.target);fd.append('<?= csrf_token() ?>',document.querySelector('input[name="<?= csrf_token() ?>"]')?.value||'<?= csrf_hash() ?>');try{const r=await fetch('<?= site_url('suppliers/quick') ?>',{method:'POST',body:fd});const j=await r.json();if(j.csrfHash){document.querySelectorAll('input[name=\"<?= csrf_token() ?>\"]').forEach(x=>x.value=j.csrfHash)}if(!j.ok){shopToast(j.error||'Unable to add supplier','error');return}const o=new Option(j.supplier.name,j.supplier.id,true,true);document.getElementById('supplierSelect').add(o);document.getElementById('supplierQuickDialog').close();e.target.reset();shopToast('Supplier added')}catch(err){shopToast('Unable to add supplier','error')}});
-addPurchaseRow();
+    let purchaseIndex = 0;
+
+    function addPurchaseRow() {
+        const t = document.getElementById('purchaseRowTemplate');
+        const node = t.content.firstElementChild.cloneNode(true);
+        const i = purchaseIndex++;
+        const product = node.querySelector('.product-select'),
+            qty = node.querySelector('.qty'),
+            cost = node.querySelector('.cost'),
+            tax = node.querySelector('.tax');
+        product.name = `items[${i}][product_id]`;
+        qty.name = `items[${i}][qty]`;
+        cost.name = `items[${i}][unit_cost]`;
+        tax.name = `items[${i}][tax_percent]`;
+        product.addEventListener('change', () => {
+            const o = product.selectedOptions[0];
+            tax.value = o?.dataset.tax || 0;
+            renderPurchaseUnits(node, i)
+        });
+        qty.addEventListener('input', () => renderPurchaseUnits(node, i));
+        node.querySelector('.remove-row').onclick = () => node.remove();
+        document.getElementById('purchaseRows').appendChild(node)
+    }
+
+   function renderPurchaseUnits(row, i) {
+
+    const product = row.querySelector('.product-select');
+    const option = product.selectedOptions[0];
+    const box = row.querySelector('.serial-container');
+
+    const serialized = option?.dataset.serialized === '1';
+
+    if (!serialized) {
+        box.innerHTML = '';
+        return;
+    }
+
+    let qty = Math.max(
+        1,
+        parseInt(row.querySelector('.qty').value || 1, 10)
+    );
+
+    row.querySelector('.qty').step = '1';
+
+    /*
+     * Preserve all existing unit values before rebuilding.
+     */
+    const oldRows = Array.from(
+        box.querySelectorAll('.serial-unit-row')
+    );
+
+    const oldUnits = oldRows.map(unitRow => ({
+        imei1: unitRow.querySelector('.unit-imei1')?.value || '',
+        imei2: unitRow.querySelector('.unit-imei2')?.value || '',
+        serial_no: unitRow.querySelector('.unit-serial')?.value || '',
+        unique_id: unitRow.querySelector('.unit-unique')?.value || '',
+        color: unitRow.querySelector('input[name*="[color]"]')?.value || '',
+        storage_variant: unitRow.querySelector('input[name*="[storage_variant]"]')?.value || ''
+    }));
+
+    const wrap = document.createElement('div');
+
+    wrap.className = 'ms-internal';
+
+    const title = document.createElement('strong');
+    title.textContent = 'Unit identities';
+    wrap.appendChild(title);
+
+    const help = document.createElement('div');
+    help.className = 'ms-help';
+    help.textContent =
+        'Scan each physical unit. Every scanned device gets its own row. ' +
+        'Dual-SIM devices can use both IMEI fields.';
+    wrap.appendChild(help);
+
+    for (let u = 0; u < qty; u++) {
+
+        const old = oldUnits[u] || {};
+
+        const unitRow = document.createElement('div');
+
+        unitRow.className =
+            'serial-row serial-unit-row';
+
+        unitRow.dataset.unitIndex = String(u);
+
+        unitRow.innerHTML =
+            '<input class="ms-input unit-imei1" ' +
+                `name="items[${i}][units][${u}][imei1]" ` +
+                'placeholder="IMEI 1">' +
+
+            '<input class="ms-input unit-imei2" ' +
+                `name="items[${i}][units][${u}][imei2]" ` +
+                'placeholder="IMEI 2">' +
+
+            '<input class="ms-input unit-serial" ' +
+                `name="items[${i}][units][${u}][serial_no]" ` +
+                'placeholder="Serial no.">' +
+
+            '<input class="ms-input unit-unique" ' +
+                `name="items[${i}][units][${u}][unique_id]" ` +
+                'placeholder="Unique ID">' +
+
+            '<input class="ms-input" ' +
+                `name="items[${i}][units][${u}][color]" ` +
+                'placeholder="Color">' +
+
+            '<input class="ms-input" ' +
+                `name="items[${i}][units][${u}][storage_variant]" ` +
+                'placeholder="Variant / storage">' +
+
+            '<button class="ms-btn ms-btn-secondary is-sm scan-this-unit" ' +
+                'type="button">📷</button>';
+
+        /*
+         * Restore previous data.
+         */
+        unitRow.querySelector('.unit-imei1').value =
+            old.imei1 || '';
+
+        unitRow.querySelector('.unit-imei2').value =
+            old.imei2 || '';
+
+        unitRow.querySelector('.unit-serial').value =
+            old.serial_no || '';
+
+        unitRow.querySelector('.unit-unique').value =
+            old.unique_id || '';
+
+        unitRow.querySelector(
+            'input[name*="[color]"]'
+        ).value = old.color || '';
+
+        unitRow.querySelector(
+            'input[name*="[storage_variant]"]'
+        ).value = old.storage_variant || '';
+
+        /*
+         * Scan button for this specific unit.
+         */
+        unitRow
+            .querySelector('.scan-this-unit')
+            .addEventListener('click', function () {
+
+                activeRow = row;
+
+                openScanner(
+                    'Scan identifier for unit ' +
+                    (u + 1) +
+                    '.'
+                );
+            });
+
+        wrap.appendChild(unitRow);
+    }
+
+    box.replaceChildren(wrap);
+}
+    document.getElementById('quickSupplier').addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        fd.append('<?= csrf_token() ?>', document.querySelector('input[name="<?= csrf_token() ?>"]')?.value || '<?= csrf_hash() ?>');
+        try {
+            const r = await fetch('<?= site_url('suppliers/quick') ?>', {
+                method: 'POST',
+                body: fd
+            });
+            const j = await r.json();
+            if (j.csrfHash) {
+                document.querySelectorAll('input[name=\"<?= csrf_token() ?>\"]').forEach(x => x.value = j.csrfHash)
+            }
+            if (!j.ok) {
+                shopToast(j.error || 'Unable to add supplier', 'error');
+                return
+            }
+            const o = new Option(j.supplier.name, j.supplier.id, true, true);
+            document.getElementById('supplierSelect').add(o);
+            document.getElementById('supplierQuickDialog').close();
+            e.target.reset();
+            shopToast('Supplier added')
+        } catch (err) {
+            shopToast('Unable to add supplier', 'error')
+        }
+    }
+);
+    addPurchaseRow();
 </script><?= $this->endSection() ?>
